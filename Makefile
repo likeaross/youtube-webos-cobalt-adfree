@@ -25,6 +25,13 @@ PACKAGE_SOURCE_FORMAT?=auto
 IPK_MEMBER_MTIME?=$(shell date +%s)
 PACKAGE_MTIME_NORMALIZER?=scripts/normalize-package-mtime.py
 IPK_CONTAINER_VERIFIER?=scripts/verify-ipk-container.py
+# Cobalt runs as gid 5000 on the TV. webOS resets app directories to 775 on
+# reboot, so the payload must be group-owned by 5000 with group-writable
+# directories or the app loses write access to its own storage.
+IPK_OWNERSHIP_NORMALIZER?=scripts/normalize-ipk-ownership.py
+IPK_OWNER_UID?=0
+IPK_OWNER_GID?=5000
+IPK_DIR_MODE?=775
 PACKAGE_SB_API_VERSION?=$(shell strings $(WORKDIR)/image/usr/palm/applications/$(PACKAGE_NAME_OFFICIAL)/cobalt 2>/dev/null | grep sb_api | jq -r '.sb_api_version' | grep -v null || strings $(WORKDIR)/package/usr/palm/applications/$(PACKAGE_NAME_OFFICIAL)/cobalt 2>/dev/null | grep sb_api | jq -r '.sb_api_version' | grep -v null)
 YTAF_DEBUG?=0
 YTAF_DEBUG_ENABLED=$(filter 1 true yes on,$(YTAF_DEBUG))
@@ -436,6 +443,11 @@ ares-package-docker: docker-make.ares-package
 .PRECIOUS: $(PACKAGE_TARGET)
 $(PACKAGE_TARGET): FORCE $(WORKDIR)/image/usr/palm/applications/$(PACKAGE_NAME_OFFICIAL)/cobalt $(WORKDIR)/cobalt $(WORKDIR)/ipk/content/app/cobalt/content/web/adblock ares-package-docker
 	mkdir -p $(dir $@)
+	python3 $(IPK_OWNERSHIP_NORMALIZER) \
+	  --uid $(IPK_OWNER_UID) \
+	  --gid $(IPK_OWNER_GID) \
+	  --directory-mode $(IPK_DIR_MODE) \
+	  $(WORKDIR)/ipk-output/$(PACKAGE_IPK_BUILD)
 	python3 $(IPK_CONTAINER_VERIFIER) $(WORKDIR)/ipk-output/$(PACKAGE_IPK_BUILD)
 	mv $(WORKDIR)/ipk-output/$(PACKAGE_IPK_BUILD) $@
 	@echo "Package can be installed with:"
